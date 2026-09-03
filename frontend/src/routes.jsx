@@ -13,6 +13,7 @@ import ClientDetail from "./pages/ClientDetail";
 import Expenses from "./pages/Expenses";
 import Payments from "./pages/Payments";
 import Items from "./pages/Items";
+import Reports from "./pages/Reports";
 
 function ProtectedShell() {
     const { user, loading } = useAuth();
@@ -45,6 +46,7 @@ export const router = createBrowserRouter([
             { path: "expenses", element: <Expenses /> },
             { path: "payments", element: <Payments /> },
             { path: "items", element: <Items /> },
+            { path: "reports", element: <Reports /> },
         ],
     },
 ]);
