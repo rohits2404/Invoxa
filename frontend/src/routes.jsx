@@ -5,6 +5,7 @@ import Register from "./pages/Register";
 import { useAuth } from "@/context/AuthContext";
 import { AppShell } from "@/components/layout/AppShell";
 import Dashboard from "./pages/Dashboard";
+import Invoices from "./pages/Invoices";
 
 function ProtectedShell() {
     const { user, loading } = useAuth();
@@ -26,6 +27,9 @@ export const router = createBrowserRouter([
     {
         path: "/",
         element: <ProtectedShell />,
-        children: [{ path: "dashboard", element: <Dashboard /> }],
+        children: [
+            { path: "dashboard", element: <Dashboard /> },
+            { path: "invoices", element: <Invoices /> },
+        ],
     },
 ]);
