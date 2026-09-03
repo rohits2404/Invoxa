@@ -8,6 +8,8 @@ import Dashboard from "./pages/Dashboard";
 import Invoices from "./pages/Invoices";
 import InvoiceEditor from "./pages/InvoiceEditor";
 import InvoiceDetail from "./pages/InvoiceDetail";
+import Clients from "./pages/Clients";
+import ClientDetail from "./pages/ClientDetail";
 
 function ProtectedShell() {
     const { user, loading } = useAuth();
@@ -35,6 +37,8 @@ export const router = createBrowserRouter([
             { path: "invoices/new", element: <InvoiceEditor /> },
             { path: "invoices/:id", element: <InvoiceDetail /> },
             { path: "invoices/:id/edit", element: <InvoiceEditor /> },
+            { path: "clients", element: <Clients /> },
+            { path: "clients/:id", element: <ClientDetail /> },
         ],
     },
 ]);
