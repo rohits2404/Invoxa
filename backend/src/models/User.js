@@ -1,7 +1,7 @@
 import bcrypt from "bcrypt";
 import { query, queryOne } from "../config/db.js";
 
-const PUBLIC_COLS = "id, name, email, created_at, updated_at";
+export const PUBLIC_COLS = "id, name, email, created_at, updated_at";
 
 export function hashPassword(plain) {
     return bcrypt.hash(plain, 12);

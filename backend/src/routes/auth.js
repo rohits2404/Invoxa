@@ -8,8 +8,16 @@ import { signToken, cookieOptions } from "../utils/jwt.js";
 import { validate } from "../middleware/validate.js";
 import { requireAuth } from "../middleware/auth.js";
 import { authLimiter } from "../middleware/rateLimit.js";
-import User from "../models/User.js";
-import Settings from "../models/Settings.js";
+import {
+    findByEmail,
+    findByIdWithHash,
+    updateName,
+    create,
+    hashPassword,
+    comparePassword,
+    updatePassword,
+} from "../models/User.js";
+import { ensureUser, update } from "../models/Settings.js";
 
 const router = express.Router();
 
@@ -47,24 +55,24 @@ router.post(
     asyncHandler(async (req, res) => {
         const { name, email, password, companyName, address } = req.body;
 
-        const existing = await User.findByEmail(email);
+        const existing = await findByEmail(email);
 
         if (existing) {
             throw ApiError.conflict("Email Already Registered");
         }
 
-        const passwordHash = await User.hashPassword(password);
+        const passwordHash = await hashPassword(password);
 
-        const user = await User.create({
+        const user = await create({
             name,
             email,
-            password_hash: passwordHash,
+            passwordHash,
         });
 
-        await Settings.ensure(user.id);
+        await ensureUser(user.id);
 
         if (companyName || address) {
-            await Settings.update(user.id, {
+            await update(user.id, {
                 company_name: companyName || "",
                 address: address || "",
                 email,
@@ -84,13 +92,13 @@ router.post(
     asyncHandler(async (req, res) => {
         const { email, password } = req.body;
 
-        const record = await User.findByEmail(email);
+        const record = await findByEmail(email);
 
         if (!record) {
             throw ApiError.unauthorized("Invalid Credentials");
         }
 
-        const ok = await User.comparePassword(password, record.password_hash);
+        const ok = await comparePassword(password, record.password_hash);
 
         if (!ok) {
             throw ApiError.unauthorized("Invalid Credentials");
@@ -132,7 +140,7 @@ router.patch(
     requireAuth,
     validate(profileSchema),
     asyncHandler(async (req, res) => {
-        const user = await User.updateName(req.user.id, req.body.name);
+        const user = await updateName(req.user.id, req.body.name);
         res.json({ user });
     }),
 );
@@ -143,17 +151,17 @@ router.patch(
     requireAuth,
     validate(passwordSchema),
     asyncHandler(async (req, res) => {
-        const record = await User.findByIdWithHash(req.user.id);
+        const record = await findByIdWithHash(req.user.id);
         if (!record) throw ApiError.unauthorized("Session No Longer Valid");
 
-        const ok = await User.comparePassword(
+        const ok = await comparePassword(
             req.body.currentPassword,
             record.password_hash,
         );
         if (!ok) throw ApiError.unauthorized("Current Password Is Incorrect");
 
-        const passwordHash = await User.hashPassword(req.body.newPassword);
-        await User.updatePassword(req.user.id, passwordHash);
+        const passwordHash = await hashPassword(req.body.newPassword);
+        await updatePassword(req.user.id, passwordHash);
         res.json({ ok: true });
     }),
 );

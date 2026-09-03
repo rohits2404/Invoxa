@@ -1,7 +1,7 @@
 import env from "../config/env.js";
 import { ApiError } from "../utils/ApiError.js";
 import { verifyToken } from "../utils/jwt.js";
-import User from "../models/User.js";
+import { findById } from "../models/User.js";
 
 export async function requireAuth(req, res, next) {
     try {
@@ -9,7 +9,7 @@ export async function requireAuth(req, res, next) {
         if (!token) throw ApiError.unauthorized();
 
         const payload = verifyToken(token);
-        const user = await User.findById(payload.sub);
+        const user = await findById(payload.sub);
 
         if (!user) throw ApiError.unauthorized("Session No Longer Valid");
 
