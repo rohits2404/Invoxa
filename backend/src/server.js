@@ -9,6 +9,7 @@ import { notFound, errorHandler } from "./middleware/errorHandler.js";
 import healthRouter from "./routes/health.js";
 import authRouter from "./routes/auth.js";
 import clientsRouter from "./routes/clients.js";
+import invoicesRouter from "./routes/invoice.js";
 
 const app = express();
 
@@ -32,6 +33,7 @@ if (!env.isProd) {
 app.use("/api/health", healthRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/clients", clientsRouter);
+app.use("/api/invoices", invoicesRouter);
 
 app.use(notFound);
 app.use(errorHandler);
