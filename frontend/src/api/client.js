@@ -1,9 +1,11 @@
 import axios from "axios";
 
 export const apiClient = axios.create({
-    baseURL: "/api",
+    baseURL: import.meta.env.VITE_API_URL,
     withCredentials: true,
-    headers: { "Content-Type": "application/json" },
+    headers: {
+        "Content-Type": "application/json",
+    },
 });
 
 apiClient.interceptors.response.use(
@@ -12,7 +14,8 @@ apiClient.interceptors.response.use(
         const message =
             err.response?.data?.error?.message ||
             err.message ||
-            "Request failed";
+            "Request Failed";
+
         return Promise.reject({
             status: err.response?.status,
             message,
