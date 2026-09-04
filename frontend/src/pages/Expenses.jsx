@@ -21,14 +21,16 @@ import { StatCard } from "@/components/dashboard/StatCard";
 import { useExpenses, useExpenseMutations } from "@/hooks/useFeatures";
 import { aiApi } from "@/api/ai";
 import { formatMoney, formatDate, toDateInput, cn } from "@/lib/utils";
+import { DeleteModal } from "@/components/ui/DeleteModal";
 
 export default function Expenses() {
     const [category, setCategory] = useState("all");
-    const { data, isLoading } = useExpenses({ category });
-    const { remove } = useExpenseMutations();
     const [modal, setModal] = useState(null); // null | expense-or-prefill
     const [scanning, setScanning] = useState(false);
     const [scanErr, setScanErr] = useState("");
+    const [deleteExpense, setDeleteExpense] = useState(null);
+    const { data, isLoading } = useExpenses({ category });
+    const { remove } = useExpenseMutations();
     const fileRef = useRef(null);
 
     const expenses = data?.expenses || [];
@@ -56,11 +58,20 @@ export default function Expenses() {
         }
     }
 
-    async function onDelete(e, exp) {
+    function onDelete(e, exp) {
         e.stopPropagation();
-        if (!window.confirm(`Delete Expense From ${exp.vendor || "Vendor"}?`))
-            return;
-        await remove.mutateAsync(exp.id);
+        setDeleteExpense(exp);
+    }
+
+    async function confirmDelete() {
+        if (!deleteExpense) return;
+
+        try {
+            await remove.mutateAsync(deleteExpense.id);
+            setDeleteExpense(null);
+        } catch (error) {
+            console.error("Failed to delete expense:", error);
+        }
     }
 
     return (
@@ -216,6 +227,28 @@ export default function Expenses() {
                 open={!!modal}
                 expense={modal}
                 onClose={() => setModal(null)}
+            />
+
+            <DeleteModal
+                open={!!deleteExpense}
+                title="Delete Expense?"
+                description="This Expense Will Be Permanently Removed From Your Expense Records."
+                itemName={
+                    deleteExpense
+                        ? `${deleteExpense.vendor || "Vendor"} · ${formatMoney(
+                              deleteExpense.amount,
+                              deleteExpense.currency,
+                          )}`
+                        : ""
+                }
+                confirmText="Delete Expense"
+                loading={remove.isPending}
+                onConfirm={confirmDelete}
+                onClose={() => {
+                    if (!remove.isPending) {
+                        setDeleteExpense(null);
+                    }
+                }}
             />
         </div>
     );

@@ -12,22 +12,29 @@ import { StatCard } from "@/components/dashboard/StatCard";
 import { usePayments, usePaymentMutations } from "@/hooks/useFeatures";
 import { useInvoices } from "@/hooks/useInvoices";
 import { formatMoney, formatDate } from "@/lib/utils";
+import { DeleteModal } from "@/components/ui/DeleteModal";
 
 export default function Payments() {
     const { data, isLoading } = usePayments();
     const { remove } = usePaymentMutations();
     const [modalOpen, setModalOpen] = useState(false);
+    const [deletePayment, setDeletePayment] = useState(null);
 
     const payments = data?.payments || [];
 
-    async function onDelete(p) {
-        if (
-            !window.confirm(
-                `Remove this ${formatMoney(p.amount)} payment? The invoice may revert to unpaid.`,
-            )
-        )
-            return;
-        await remove.mutateAsync(p.id);
+    function onDelete(p) {
+        setDeletePayment(p);
+    }
+
+    async function confirmDelete() {
+        if (!deletePayment) return;
+
+        try {
+            await remove.mutateAsync(deletePayment.id);
+            setDeletePayment(null);
+        } catch (error) {
+            console.error("Failed To Remove Payment:", error);
+        }
     }
 
     return (
@@ -129,6 +136,25 @@ export default function Payments() {
             <RecordPaymentModal
                 open={modalOpen}
                 onClose={() => setModalOpen(false)}
+            />
+
+            <DeleteModal
+                open={!!deletePayment}
+                title="Remove Payment?"
+                description="This Payment Will Be Removed From Your Ledger. The Associated Invoice May Revert To Unpaid."
+                itemName={
+                    deletePayment
+                        ? `${formatMoney(deletePayment.amount)} Payment`
+                        : ""
+                }
+                confirmText="Remove Payment"
+                loading={remove.isPending}
+                onConfirm={confirmDelete}
+                onClose={() => {
+                    if (!remove.isPending) {
+                        setDeletePayment(null);
+                    }
+                }}
             />
         </div>
     );

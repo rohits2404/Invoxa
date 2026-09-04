@@ -133,4 +133,17 @@ router.patch(
     }),
 );
 
+router.delete(
+    "/:id",
+    validate(idParam, "params"),
+    asyncHandler(async (req, res) => {
+        const result = await query(
+            `DELETE FROM clients WHERE id = $1 AND user_id = $2`,
+            [req.params.id, req.user.id],
+        );
+        if (!result.rowCount) throw ApiError.notFound("Client Not Found");
+        res.json({ ok: true });
+    }),
+);
+
 export default router;

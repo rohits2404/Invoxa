@@ -1,79 +1,67 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import OpenAI from "openai";
 import { z } from "zod";
 
 import env from "../config/env.js";
 import { ApiError } from "../utils/ApiError.js";
 
-const ai = env.geminiApiKey
-    ? new GoogleGenAI({ apiKey: env.geminiApiKey })
+import { pdf } from "pdf-to-img";
+
+const client = env.groqApiKey
+    ? new OpenAI({
+          apiKey: env.groqApiKey,
+          baseURL: "https://api.groq.com/openai/v1",
+      })
     : null;
 
+// Text-generation model.
+// Good fit for summaries, reminders, notes, etc.
+const TEXT_MODEL = env.groqModel || "openai/gpt-oss-20b";
+
+// Vision model.
+// Used for receipt/image extraction.
+const VISION_MODEL = env.groqVisionModel || "qwen/qwen3.6-27b";
+
 function requireAI() {
-    if (!ai) {
+    if (!client) {
         throw ApiError.internal(
-            "GEMINI_API_KEY is not configured on the server.",
+            "GROQ_API_KEY is not configured on the server.",
         );
     }
 
-    async function generate({ contents, config }) {
-        const result = await ai.models.generateContent({
-            model: env.geminiModel,
-            contents,
-            config,
-        });
-
-        const text =
-            typeof result.text === "function" ? result.text() : result.text;
-        if (!text) throw new Error("Empty response from Gemini");
-        return text;
-    }
-
-    return { generate };
+    return client;
 }
 
-const receiptResponseSchema = {
-    type: Type.OBJECT,
-    required: ["vendor", "total", "lineItems"],
-    properties: {
-        vendor: { type: Type.STRING, description: "Merchant / vendor name" },
-        date: {
-            type: Type.STRING,
-            description: "ISO date YYYY-MM-DD if visible, else empty",
-        },
-        currency: {
-            type: Type.STRING,
-            description: "3-letter code like USD, else empty",
-        },
-        subtotal: { type: Type.NUMBER },
-        tax: { type: Type.NUMBER },
-        total: { type: Type.NUMBER },
-        category: {
-            type: Type.STRING,
-            description: "Expense category e.g. Meals, Software, Travel",
-        },
-        notes: { type: Type.STRING },
-        lineItems: {
-            type: Type.ARRAY,
-            items: {
-                type: Type.OBJECT,
-                required: ["description", "quantity", "rate"],
-                properties: {
-                    description: { type: Type.STRING },
-                    quantity: { type: Type.NUMBER },
-                    rate: { type: Type.NUMBER, description: "Unit price" },
-                },
-            },
-        },
-    },
-};
+/**
+ * Generate plain text using Groq.
+ */
+async function generateText({ input, model = TEXT_MODEL, temperature = 0.5 }) {
+    const ai = requireAI();
 
+    const response = await ai.responses.create({
+        model,
+        input,
+        temperature,
+    });
+
+    const text = response.output_text?.trim();
+
+    if (!text) {
+        throw new Error("Empty response from Groq");
+    }
+
+    return text;
+}
+
+/**
+ * Receipt schema used by Zod after Groq returns JSON.
+ */
 const receiptValidator = z.object({
     vendor: z.string().default(""),
     date: z.string().default(""),
     currency: z.string().default(""),
-    subtotal: z.number().default(0),
-    tax: z.number().default(0),
-    total: z.number().default(0),
+    subtotal: z.coerce.number().default(0),
+    tax: z.coerce.number().default(0),
+    total: z.coerce.number().default(0),
     category: z.string().default(""),
     notes: z.string().default(""),
     lineItems: z
@@ -87,58 +75,217 @@ const receiptValidator = z.object({
         .default([]),
 });
 
-async function parseReceipt({ buffer, mimeType }) {
-    const { generate } = requireAI();
-    const prompt = [
-        "You are an accounts-payable assistant. Extract structured data from this receipt or invoice image/PDF.",
-        "Return the vendor, date, currency, each line item (description, quantity, unit rate), subtotal, tax, and grand total.",
-        "If a value is not visible, use an empty string or 0. Quantities default to 1 when not shown.",
-        "Suggest a sensible expense category.",
-    ].join("\n");
+function validateReceiptResponse(text) {
+    let parsed;
 
-    const text = await generate({
-        contents: [
-            {
-                role: "user",
-                parts: [
-                    { text: prompt },
-                    {
-                        inlineData: {
-                            mimeType,
-                            data: buffer.toString("base64"),
-                        },
-                    },
-                ],
-            },
-        ],
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: receiptResponseSchema,
-            temperature: 0.1,
-        },
-    });
-    return receiptValidator.parse(JSON.parse(text));
+    try {
+        parsed = JSON.parse(text);
+    } catch (error) {
+        throw new Error(`Groq returned invalid receipt JSON: ${error.message}`);
+    }
+
+    return receiptValidator.parse(parsed);
 }
 
+/**
+ * Extract structured receipt data from an IMAGE.
+ *
+ * Groq's Qwen vision model supports image input and JSON mode.
+ */
+async function parseReceipt({ buffer, mimeType }) {
+    const ai = requireAI();
+
+    const prompt = `
+Extract this receipt or invoice into exactly one JSON object.
+
+Schema:
+{
+  "vendor": "",
+  "date": "",
+  "currency": "",
+  "subtotal": 0,
+  "tax": 0,
+  "total": 0,
+  "category": "",
+  "notes": "",
+  "lineItems": [
+    {
+      "description": "",
+      "quantity": 1,
+      "rate": 0
+    }
+  ]
+}
+
+Rules:
+- Read values directly from the document.
+- Do not invent or guess values.
+- Missing string values = "".
+- Missing numeric values = 0.
+- If quantity is not shown, use 1.
+- "rate" means unit price.
+- "total" means the final amount charged.
+- Date must be YYYY-MM-DD when visible.
+- Currency must be a 3-letter code when visible.
+- Return ONLY valid JSON.
+`.trim();
+
+    /*
+     * ---------------------------------------------------------
+     * IMAGE
+     * ---------------------------------------------------------
+     */
+    if (mimeType?.startsWith("image/")) {
+        const base64Image = buffer.toString("base64");
+
+        const response = await ai.chat.completions.create({
+            model: VISION_MODEL,
+            messages: [
+                {
+                    role: "user",
+                    content: [
+                        {
+                            type: "text",
+                            text: prompt,
+                        },
+                        {
+                            type: "image_url",
+                            image_url: {
+                                url: `data:${mimeType};base64,${base64Image}`,
+                            },
+                        },
+                    ],
+                },
+            ],
+            response_format: {
+                type: "json_object",
+            },
+            reasoning_effort: "none",
+            temperature: 0.1,
+            max_completion_tokens: 700,
+        });
+
+        const text = response.choices?.[0]?.message?.content;
+
+        if (!text) {
+            throw new Error("Empty receipt response from Groq");
+        }
+
+        return validateReceiptResponse(text);
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * PDF
+     * ---------------------------------------------------------
+     */
+    if (mimeType === "application/pdf") {
+        const document = await pdf(buffer, {
+            scale: 2.5,
+        });
+
+        const images = [];
+
+        // Limit pages to avoid sending an enormous PDF to Groq.
+        const MAX_PAGES = 5;
+
+        for await (const image of document) {
+            images.push(image);
+
+            if (images.length >= MAX_PAGES) {
+                break;
+            }
+        }
+
+        if (!images.length) {
+            throw new Error("Could not convert PDF into images");
+        }
+
+        /*
+         * Groq allows multiple images in a vision request.
+         * We send up to 5 PDF pages together.
+         */
+        const content = [
+            {
+                type: "text",
+                text:
+                    prompt +
+                    `\n\nThis document may contain multiple pages. Combine information from all pages into one receipt/invoice JSON object.`,
+            },
+        ];
+
+        for (const imageBuffer of images) {
+            content.push({
+                type: "image_url",
+                image_url: {
+                    url: `data:image/png;base64,${imageBuffer.toString("base64")}`,
+                },
+            });
+        }
+
+        const response = await ai.chat.completions.create({
+            model: VISION_MODEL,
+            messages: [
+                {
+                    role: "user",
+                    content,
+                },
+            ],
+            response_format: {
+                type: "json_object",
+            },
+            reasoning_effort: "none",
+            temperature: 0.1,
+            max_completion_tokens: 700,
+        });
+
+        const text = response.choices?.[0]?.message?.content;
+
+        if (!text) {
+            throw new Error("Empty receipt response from Groq");
+        }
+
+        return validateReceiptResponse(text);
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * UNSUPPORTED FILE
+     * ---------------------------------------------------------
+     */
+
+    throw ApiError.badRequest(
+        "Unsupported receipt file type. Please upload an image or PDF.",
+    );
+}
+
+/**
+ * Generate a business summary.
+ */
 async function businessSummary(data) {
-    const { generate } = requireAI();
     const prompt = [
         "You are a friendly financial analyst for a small business owner.",
         "Given this month's billing data (JSON), write a concise 2-3 sentence plain-English summary.",
         "Mention revenue trend vs last month with a percentage if computable, count and dollar total of overdue invoices.",
-        "and one actionable suggestion (e.g. follow up with a specific client). Be specific with numbers. No markdown, no bullet points.",
+        "Include one actionable suggestion, such as following up with a specific client.",
+        "Be specific with numbers.",
+        "No markdown.",
+        "No bullet points.",
         "",
         "DATA:",
         JSON.stringify(data),
     ].join("\n");
 
-    const text = await generate({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        config: { temperature: 0.5 },
+    return generateText({
+        input: prompt,
+        model: TEXT_MODEL,
+        temperature: 0.5,
     });
-    return text.trim();
 }
 
+/**
+ * Generate a payment reminder email.
+ */
 async function paymentReminder({
     tone,
     invoice,
@@ -146,7 +293,6 @@ async function paymentReminder({
     company,
     daysOverdue,
 }) {
-    const { generate } = requireAI();
     const toneGuide =
         tone === "firm"
             ? "firm but professional - this invoice is significantly overdue"
@@ -157,34 +303,55 @@ async function paymentReminder({
     const prompt = [
         `Write a payment reminder email. Tone: ${toneGuide}.`,
         "Return a short subject line, then a blank line, then the email body.",
-        "Use the merchant/company name as the signature. Keep it under 130 words. Plain text, no markdown.",
+        "Use the merchant/company name as the signature.",
+        "Keep it under 130 words.",
+        "Plain text only.",
+        "No markdown.",
         "",
         "CONTEXT:",
-        JSON.stringify({ invoice, client, company, daysOverdue }),
+        JSON.stringify({
+            invoice,
+            client,
+            company,
+            daysOverdue,
+        }),
     ].join("\n");
 
-    const text = await generate({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        config: { temperature: 0.6 },
+    const text = await generateText({
+        input: prompt,
+        model: TEXT_MODEL,
+        temperature: 0.6,
     });
 
     const trimmed = text.trim();
+
     const nl = trimmed.indexOf("\n");
+
     let subject = "";
     let body = trimmed;
+
     if (nl > -1) {
         subject = trimmed
             .slice(0, nl)
             .replace(/^subject:\s*/i, "")
             .trim();
+
         body = trimmed.slice(nl + 1).trim();
+
+        // Remove an optional blank line between subject and body.
+        body = body.replace(/^\s*\n/, "").trim();
     }
 
-    return { subject, body };
+    return {
+        subject,
+        body,
+    };
 }
 
+/**
+ * Generate invoice notes or service descriptions.
+ */
 async function writeNote({ kind, prompt, items, client }) {
-    const { generate } = requireAI();
     const target =
         kind === "terms"
             ? "professional payment-terms / notes text for the bottom of an invoice"
@@ -193,19 +360,21 @@ async function writeNote({ kind, prompt, items, client }) {
     const full = [
         `Write ${target}.`,
         prompt ? `The user's request: ${prompt}` : "",
-        "Keep it polished and brief (1-3 sentences). Plain text only, no markdown, no preamble.",
+        "Keep it polished and brief (1-3 sentences).",
+        "Plain text only.",
+        "No markdown.",
+        "No preamble.",
         items?.length ? `Line items for context: ${JSON.stringify(items)}` : "",
         client ? `Client: ${JSON.stringify(client)}` : "",
     ]
         .filter(Boolean)
         .join("\n");
 
-    const text = await generate({
-        contents: [{ role: "user", parts: [{ text: full }] }],
-        config: { temperature: 0.7 },
+    return generateText({
+        input: full,
+        model: TEXT_MODEL,
+        temperature: 0.7,
     });
-
-    return text.trim();
 }
 
 export { parseReceipt, businessSummary, paymentReminder, writeNote };

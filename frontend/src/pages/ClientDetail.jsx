@@ -33,6 +33,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ClientFormModal } from "@/components/clients/ClientFormModal";
 import { useClient, useDeleteClient } from "@/hooks/useClients";
 import { formatMoney, formatDate } from "@/lib/utils";
+import { DeleteModal } from "@/components/ui/DeleteModal";
 
 function isOverdue(inv) {
     return (
@@ -112,6 +113,7 @@ export default function ClientDetail() {
     const { data, isLoading, error } = useClient(id);
     const del = useDeleteClient();
     const [editOpen, setEditOpen] = useState(false);
+    const [deleteOpen, setDeleteOpen] = useState(false);
 
     const invoices = data?.invoices || [];
     const stats = data?.stats || { count: 0, totalBilled: 0, outstanding: 0 };
@@ -139,15 +141,18 @@ export default function ClientDetail() {
 
     const client = data.client;
 
-    async function onDelete() {
-        if (
-            !window.confirm(
-                `Delete ${client.name}? Their Invoices Will Be Kept But Unlinked.`,
-            )
-        )
-            return;
-        await del.mutateAsync(id);
-        nav("/clients");
+    function onDelete() {
+        setDeleteOpen(true);
+    }
+
+    async function confirmDelete() {
+        try {
+            await del.mutateAsync(id);
+            setDeleteOpen(false);
+            nav("/clients");
+        } catch (error) {
+            console.error("Failed To Delete Client:", error);
+        }
     }
 
     return (
@@ -323,6 +328,19 @@ export default function ClientDetail() {
                 open={editOpen}
                 onClose={() => setEditOpen(false)}
                 client={client}
+            />
+
+            <DeleteModal
+                open={deleteOpen}
+                title="Delete Client?"
+                description="The Client Will Be Permanently Removed. Their Invoices Will Be Kept But Unlinked From This Client."
+                itemName={client.name}
+                confirmText="Delete Client"
+                loading={del.isPending}
+                onConfirm={confirmDelete}
+                onClose={() => {
+                    if (!del.isPending) setDeleteOpen(false);
+                }}
             />
         </div>
     );

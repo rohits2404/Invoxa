@@ -1,6 +1,5 @@
-import { mock } from "@/mock/api";
+import { apiClient } from "./client";
 
 export const dashboardApi = {
-    // ── Mock (local data) ──
-    get: () => mock.dashboard.get(),
+    get: () => apiClient.get("/dashboard").then((r) => r.data),
 };

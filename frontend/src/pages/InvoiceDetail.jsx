@@ -28,6 +28,7 @@ import {
 import { useSettings } from "@/hooks/useSettings";
 import { aiApi } from "@/api/ai";
 import { formatMoney, formatDate, cn } from "@/lib/utils";
+import { DeleteModal } from "@/components/ui/DeleteModal";
 
 export default function InvoiceDetail() {
     const { id } = useParams();
@@ -36,6 +37,7 @@ export default function InvoiceDetail() {
     const { data: settings } = useSettings();
     const setStatus = useSetInvoiceStatus();
     const del = useDeleteInvoice();
+    const [deleteOpen, setDeleteOpen] = useState(false);
 
     if (isLoading) {
         return (
@@ -57,11 +59,18 @@ export default function InvoiceDetail() {
     const st = invoice.effective_status;
     const isPaid = invoice.status === "paid";
 
-    async function onDelete() {
-        if (!window.confirm(`Delete Invoice ${invoice.invoice_number}?`))
-            return;
-        await del.mutateAsync(id);
-        nav("/invoices");
+    function onDelete() {
+        setDeleteOpen(true);
+    }
+
+    async function confirmDelete() {
+        try {
+            await del.mutateAsync(id);
+            setDeleteOpen(false);
+            nav("/invoices");
+        } catch (error) {
+            console.error("Failed To Delete Invoice:", error);
+        }
     }
 
     return (
@@ -178,6 +187,18 @@ export default function InvoiceDetail() {
                     <ClientCard invoice={invoice} />
                 </div>
             </div>
+            <DeleteModal
+                open={deleteOpen}
+                title="Delete Invoice?"
+                description="This Invoice Will Be Permanently Removed. This Action Cannot Be Undone."
+                itemName={invoice.invoice_number}
+                confirmText="Delete Invoice"
+                loading={del.isPending}
+                onConfirm={confirmDelete}
+                onClose={() => {
+                    if (!del.isPending) setDeleteOpen(false);
+                }}
+            />
         </div>
     );
 }

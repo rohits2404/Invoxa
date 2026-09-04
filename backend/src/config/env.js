@@ -34,8 +34,9 @@ export default {
         .map((o) => o.trim())
         .filter(Boolean),
 
-    geminiApiKey: process.env.GEMINI_API_KEY || "",
-    geminiModel: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+    groqApiKey: process.env.GROQ_API_KEY,
+    groqModel: process.env.GROQ_MODEL || "openai/gpt-oss-20b",
+    groqVisionModel: process.env.GROQ_VISION_MODEL || "qwen/qwen3.6-27b",
 
     isProd: process.env.NODE_ENV === "production",
 };

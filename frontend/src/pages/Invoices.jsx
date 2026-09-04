@@ -17,6 +17,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useInvoices, useDeleteInvoice } from "@/hooks/useInvoices";
 import { formatMoney, formatDate, cn } from "@/lib/utils";
+import { DeleteModal } from "@/components/ui/DeleteModal";
 
 const STATUS_TABS = [
     { key: "all", label: "All" },
@@ -39,6 +40,7 @@ export default function Invoices() {
         order: sort.order,
     });
     const del = useDeleteInvoice();
+    const [deleteInvoice, setDeleteInvoice] = useState(null);
 
     const invoices = data || [];
 
@@ -50,15 +52,20 @@ export default function Invoices() {
         );
     }
 
-    async function onDelete(e, inv) {
+    function onDelete(e, inv) {
         e.stopPropagation();
-        if (
-            !window.confirm(
-                `Delete Invoice ${inv.invoice_number}? This Cannot Be Undone.`,
-            )
-        )
-            return;
-        await del.mutateAsync(inv.id);
+        setDeleteInvoice(inv);
+    }
+
+    async function confirmDelete() {
+        if (!deleteInvoice) return;
+
+        try {
+            await del.mutateAsync(deleteInvoice.id);
+            setDeleteInvoice(null);
+        } catch (error) {
+            console.error("Failed to delete invoice:", error);
+        }
     }
 
     return (
@@ -219,6 +226,18 @@ export default function Invoices() {
                     </div>
                 </Card>
             )}
+            <DeleteModal
+                open={!!deleteInvoice}
+                title="Delete Invoice?"
+                description="This Invoice Will Be Permanently Removed. This Action Cannot Be Undone."
+                itemName={deleteInvoice?.invoice_number}
+                confirmText="Delete Invoice"
+                loading={del.isPending}
+                onConfirm={confirmDelete}
+                onClose={() => {
+                    if (!del.isPending) setDeleteInvoice(null);
+                }}
+            />
         </div>
     );
 }

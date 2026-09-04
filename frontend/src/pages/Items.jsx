@@ -9,16 +9,29 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useItems, useItemMutations } from "@/hooks/useFeatures";
 import { formatMoney } from "@/lib/utils";
+import { DeleteModal } from "@/components/ui/DeleteModal";
 
 export default function Items() {
     const { data: items, isLoading } = useItems();
-    const [modal, setModal] = useState(null); // null | {} | item
+    const [modal, setModal] = useState(null);
+    const [deleteItem, setDeleteItem] = useState(null);
+
     const { remove } = useItemMutations();
 
-    async function onDelete(e, item) {
+    function onDelete(e, item) {
         e.stopPropagation();
-        if (!window.confirm(`Delete "${item.name}"?`)) return;
-        await remove.mutateAsync(item.id);
+        setDeleteItem(item);
+    }
+
+    async function confirmDelete() {
+        if (!deleteItem) return;
+
+        try {
+            await remove.mutateAsync(deleteItem.id);
+            setDeleteItem(null);
+        } catch (error) {
+            console.error("Failed to delete item:", error);
+        }
     }
 
     return (
@@ -107,6 +120,20 @@ export default function Items() {
                 open={!!modal}
                 item={modal?.id ? modal : null}
                 onClose={() => setModal(null)}
+            />
+            <DeleteModal
+                open={!!deleteItem}
+                title="Delete Item?"
+                description="This Item Will Be Permanently Removed From Your Saved Products and Services."
+                itemName={deleteItem?.name}
+                confirmText="Delete Item"
+                loading={remove.isPending}
+                onConfirm={confirmDelete}
+                onClose={() => {
+                    if (!remove.isPending) {
+                        setDeleteItem(null);
+                    }
+                }}
             />
         </div>
     );
