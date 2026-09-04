@@ -12,6 +12,8 @@ import clientsRouter from "./routes/clients.js";
 import invoicesRouter from "./routes/invoice.js";
 import dashboardRouter from "./routes/dashboard.js";
 import reportsRouter from "./routes/reports.js";
+import settingsRouter from "./routes/settings.js";
+import itemsRouter from "./routes/items.js";
 
 const app = express();
 
@@ -38,6 +40,8 @@ app.use("/api/clients", clientsRouter);
 app.use("/api/invoices", invoicesRouter);
 app.use("/api/dashboard", dashboardRouter);
 app.use("/api/reports", reportsRouter);
+app.use("/api/settings", settingsRouter);
+app.use("/api/items", itemsRouter);
 
 app.use(notFound);
 app.use(errorHandler);
