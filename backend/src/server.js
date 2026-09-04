@@ -10,6 +10,8 @@ import healthRouter from "./routes/health.js";
 import authRouter from "./routes/auth.js";
 import clientsRouter from "./routes/clients.js";
 import invoicesRouter from "./routes/invoice.js";
+import dashboardRouter from "./routes/dashboard.js";
+import reportsRouter from "./routes/reports.js";
 
 const app = express();
 
@@ -34,6 +36,8 @@ app.use("/api/health", healthRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/clients", clientsRouter);
 app.use("/api/invoices", invoicesRouter);
+app.use("/api/dashboard", dashboardRouter);
+app.use("/api/reports", reportsRouter);
 
 app.use(notFound);
 app.use(errorHandler);
