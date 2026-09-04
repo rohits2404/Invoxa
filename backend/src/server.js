@@ -14,6 +14,8 @@ import dashboardRouter from "./routes/dashboard.js";
 import reportsRouter from "./routes/reports.js";
 import settingsRouter from "./routes/settings.js";
 import itemsRouter from "./routes/items.js";
+import expensesRouter from "./routes/expenses.js";
+import paymentsRouter from "./routes/payments.js";
 
 const app = express();
 
@@ -42,6 +44,8 @@ app.use("/api/dashboard", dashboardRouter);
 app.use("/api/reports", reportsRouter);
 app.use("/api/settings", settingsRouter);
 app.use("/api/items", itemsRouter);
+app.use("/api/expenses", expensesRouter);
+app.use("/api/payments", paymentsRouter);
 
 app.use(notFound);
 app.use(errorHandler);
