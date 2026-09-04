@@ -16,6 +16,7 @@ import settingsRouter from "./routes/settings.js";
 import itemsRouter from "./routes/items.js";
 import expensesRouter from "./routes/expenses.js";
 import paymentsRouter from "./routes/payments.js";
+import aiRouter from "./routes/ai.js";
 
 const app = express();
 
@@ -46,6 +47,7 @@ app.use("/api/settings", settingsRouter);
 app.use("/api/items", itemsRouter);
 app.use("/api/expenses", expensesRouter);
 app.use("/api/payments", paymentsRouter);
+app.use("/api/ai", aiRouter);
 
 app.use(notFound);
 app.use(errorHandler);

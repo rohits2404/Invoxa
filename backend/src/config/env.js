@@ -35,7 +35,7 @@ export default {
         .filter(Boolean),
 
     geminiApiKey: process.env.GEMINI_API_KEY || "",
-    geminiModel: process.env.GEMINI_MODEL || "openai/gpt-oss-20b",
+    geminiModel: process.env.GEMINI_MODEL || "gemini-2.5-flash",
 
     isProd: process.env.NODE_ENV === "production",
 };
